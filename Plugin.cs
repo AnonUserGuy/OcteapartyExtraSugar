@@ -1,8 +1,10 @@
 ﻿using BepInEx;
 using BepInEx.Logging;
+using BepInEx.Configuration;
 using HarmonyLib;
-using System.Collections.Generic;
 using UnityEngine;
+using System.Reflection;
+using System.Collections.Generic;
 
 namespace OcteapartyExtraSugar;
 
@@ -12,14 +14,31 @@ public class Plugin : BaseUnityPlugin
     internal static new ManualLogSource Logger;
     public Harmony harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
 
+    private static ConfigEntry<int> howMany;
+    private static ConfigEntry<bool> mutateEventTemplates;
+
     private void Awake()
     {
         // Plugin startup logic
         Logger = base.Logger;
         Logger.LogInfo($"Plugin {MyPluginInfo.PLUGIN_GUID} is loaded!");
 
-        harmony.PatchAll();
+        howMany = Config.Bind("General",
+                              "HowMany",
+                              3,
+                              "How many sugars per sugar cue");
 
+        mutateEventTemplates = Config.Bind("General",
+                                           "MutateEventTemplates",
+                                           true,
+                                           "Add \"amount\" parameter to the Octeaparty sugar event in editor");
+
+        harmony.PatchAll();
+        if (mutateEventTemplates.Value)
+        {
+            OcteapartyEventTemplates.templates[2].properties["amount"] = -1;
+            OcteapartyFireEventTemplates.templates[2].properties["amount"] = -1;
+        }
     }
 
     [HarmonyPatch(typeof(OcteapartyScript), "BeginInternal")]
@@ -39,56 +58,129 @@ public class Plugin : BaseUnityPlugin
 
         static readonly AccessTools.FieldRef<OcteapartyScript, int> totalRef =
         AccessTools.FieldRefAccess<OcteapartyScript, int>("total");
-        static void Postfix(OcteapartyScript __instance, ref int __result, bool play)
+
+        static readonly MethodInfo gameNameGetter = AccessTools.PropertyGetter(typeof(OcteapartyScript), "GameName");
+        static string GameName(OcteapartyScript obj) => (string)gameNameGetter.Invoke(obj, null);
+
+        static readonly MethodInfo isMixtapeOrCustomGetter = AccessTools.PropertyGetter(typeof(GameplayScript), "IsMixtapeOrCustom");
+        static bool IsMixtapeOrCustom(GameplayScript obj) => (bool)isMixtapeOrCustomGetter.Invoke(obj, null);
+
+        static readonly AccessTools.FieldRef<InputManager, Dictionary<Action, List<Target>>> targetsRef =
+        AccessTools.FieldRefAccess<InputManager, Dictionary<Action, List<Target>>>("targets");
+
+        static void Postfix(OcteapartyScript __instance, ref int __result, bool play, Entity[] entities)
         {
-            bool needsReplay = AddExtraSugar(__instance);
+            bool needsReplay = BeginInternalPostfix(__instance, entities);
             if (needsReplay)
             {
                 __result = Replay(__instance, play);
             }
         }
 
-        static bool AddExtraSugar(OcteapartyScript __instance)
+        static bool BeginInternalPostfix(OcteapartyScript __instance, Entity[] entities)
         {
-            var sugarTargetIndex = sugarTargetToIndexRef(__instance);
-            var sugarTargetToTeacup = sugarTargetToTeacupRef(__instance);
-            var sugarTargetToSmallTeacup = sugarTargetToSmallTeacupRef(__instance);
-            var inputManager = inputManagerRef(__instance);
-
-            List<float> mods = new List<float>();
-
-            foreach (KeyValuePair<float, int> entry in sugarTargetIndex)
+            if (IsMixtapeOrCustom(__instance))
             {
-                if (entry.Value == 1)
+                return BeginInternalPostfixRemix(__instance, entities);
+            }
+            else
+            {
+                return BeginInternalPostfixNonRemix(__instance);
+            }
+        }
+
+        static bool BeginInternalPostfixNonRemix(OcteapartyScript __instance)
+        {
+            List<float> mods = [];
+            foreach (KeyValuePair<float, int> entry in sugarTargetToIndexRef(__instance))
+            {
+                if (entry.Value == 0)
                 {
                     mods.Add(entry.Key);
                 }
             }
             foreach (float n in mods)
             {
-                float n0 = n - 0.5f;
-                float n2 = n + 0.5f;
-                sugarTargetIndex[n0] = 0;
-                sugarTargetIndex[n2] = 1;
-                if (sugarTargetToTeacup.ContainsKey(n))
-                {
-                    sugarTargetToTeacup[n0] = sugarTargetToTeacup[n];
-                    sugarTargetToTeacup[n2] = sugarTargetToTeacup[n];
-                }
-                if (sugarTargetToSmallTeacup != null && sugarTargetToSmallTeacup.ContainsKey(n))
-                {
-                    sugarTargetToSmallTeacup[n0] = sugarTargetToSmallTeacup[n];
-                    sugarTargetToSmallTeacup[n2] = sugarTargetToSmallTeacup[n];
-                }
-                inputManager.AddTarget(Action.Primary, n0);
-                inputManager.AddTarget(Action.Primary, n2);
+                AddExtraSugar(__instance, n, howMany.Value);
             }
             return mods.Count > 0;
+        }
+
+        static bool BeginInternalPostfixRemix(OcteapartyScript __instance, Entity[] entities)
+        {
+            bool result = false;
+            string gameName = GameName(__instance);
+            foreach (Entity entity in entities)
+            {
+                string[] args = entity.dataModel.Split(['/'], 2);
+                if (args[0] == gameName && args[1] == "sugar")
+                {
+                    result = true;
+                    if (entity.dynamicData.ContainsKey("amount"))
+                    {
+                        int amount = entity.GetInt("amount");
+                        AddExtraSugar(__instance, entity.beat + 3, amount >= 0 ? amount : howMany.Value);
+                    }
+                    else
+                    {
+                        AddExtraSugar(__instance, entity.beat + 3, howMany.Value);
+                    }
+                }
+            }
+            return result;
+        }
+
+        static void RemoveSugar(OcteapartyScript __instance, float when)
+        {
+            sugarTargetToIndexRef(__instance).Remove(when);
+            sugarTargetToTeacupRef(__instance).Remove(when);
+            sugarTargetToSmallTeacupRef(__instance)?.Remove(when);
+            targetsRef(inputManagerRef(__instance))[Action.Primary].Remove(when);
+        }
+
+        static void AddSugar(OcteapartyScript __instance, float when, float oldWhen, int index)
+        {
+            sugarTargetToIndexRef(__instance)[when] = index;
+            if (sugarTargetToTeacupRef(__instance).ContainsKey(oldWhen))
+            {
+                sugarTargetToTeacupRef(__instance)[when] = sugarTargetToTeacupRef(__instance)[oldWhen];
+            }
+            if (sugarTargetToSmallTeacupRef(__instance) != null && sugarTargetToSmallTeacupRef(__instance).ContainsKey(oldWhen))
+            {
+                sugarTargetToSmallTeacupRef(__instance)[when] = sugarTargetToSmallTeacupRef(__instance)[oldWhen];
+            }
+            inputManagerRef(__instance).AddTarget(Action.Primary, when);
+        }
+
+        static void AddExtraSugar(OcteapartyScript __instance, float when, int amount)
+        {
+            if (amount % 2 == 0)
+            {
+                RemoveSugar(__instance, when + 1);
+            }
+            if (amount < 2)
+            {
+                RemoveSugar(__instance, when);
+                RemoveSugar(__instance, when + 2);
+            }
+            else
+            {
+                for (int i = 1; i < amount - 1; i++)
+                {
+                    float sugarIndex = i * 2f / (amount - 1);
+                    if (sugarIndex == 1f)
+                    {
+                        continue;
+                    }
+                    AddSugar(__instance, when + sugarIndex, when, sugarIndex < 1 ? 0 : 1);
+                }
+            }
         }
 
         static int Replay(OcteapartyScript __instance, bool play)
         {
             var inputManager = inputManagerRef(__instance);
+            inputManager.autoplay.Stop();
             inputManager.autoplay.Clear();
             inputManager.autoplay.ClearCallbacks();
             return totalRef(__instance) = inputManager.Play(!play, play);
