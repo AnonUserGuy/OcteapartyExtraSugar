@@ -1,8 +1,29 @@
 # OcteapartyExtraSugar
-A simple BepinEx mod of Bits & Bops that modifies all sugar cues in Octeaparty to use 5 sugar cubes instead of 3. Mainly made to experiment in cue modding.
+A simple BepinEx mod of Bits & Bops that modifies the sugar cues in Octeaparty to be able to use any amount of sugar cubes instead of just 3. 
+
+I do not formally endorse this being used for custom mixtapes, I think that would be unfair. I mostly just made this to experiment in cue modding.
 
 Demo: https://youtu.be/e3MGPssxpI4
 
-# Installation
+## Installation
 - Install [BepInEx 5.x](https://docs.bepinex.dev/articles/user_guide/installation/index.html) in Bits & Bops.
 - Download `OcteapartyExtraSugar.dll` from the latest [release](https://github.com/AnonUserGuy/OcteapartyExtraSugar/releases/), and place it in `BepinEx\plugins\`.
+
+## Usage
+### Configuration
+After running Bits & Bops with the latest version of this plugin installed, a configuration file will be generated at `BepinEx\config\OcteapartyExtraSugar.cfg`. Open this file with a text editor to access the following configs:
+| Name                   | Type          | Default       | Description   |
+| ---------------------- | ------------- | ------------- | ------------- |
+| `HowMany`              | int           | `3`           | <p>Default amount sugar cubes to spawn per sugar cue.</p> <p>Affects all sugar cues in default game, and sugar cues without an "amount" set in custom mixtapes.</p> |
+| `MutateEventTemplates` | Boolean       | `true`        | <p>Whether or not to add the "Amount" parameter to the Octeaparty sugar event in the editor.</p> <p>Disabling **does not** prevent mixtapes from using the parameter, just toggles whether or not the parameter is visible in the mixtape editor.</p> |
+
+### Custom Mixtapes
+For custom mixtapes, Octeaparty sugar cues will have a new "Amount" parameter which allows each sugar cue to be given an arbitrary amount of sugar cubes. Setting this to `-1` will make the cue use the amount defined by the `HowMany` parameter, and otherwise will set the amount of sugar cubes just that cue uses. 
+
+Enable `MutateEventTemplates` to have access to this parameter within the mixtape editor. 
+
+<br>
+<br>
+<br>
+
+(...I just realized "amount" isn't the correct term and I should be using something like "number", but whatever I don't feel like going back to fix it.)
