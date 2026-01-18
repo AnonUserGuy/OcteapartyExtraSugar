@@ -7,7 +7,7 @@ Demo: https://youtu.be/e3MGPssxpI4
 
 ## Installation
 - Install [BepInEx 5.x](https://docs.bepinex.dev/articles/user_guide/installation/index.html) in Bits & Bops.
-- Download `OcteapartyExtraSugar.dll` from the latest [release](https://github.com/AnonUserGuy/OcteapartyExtraSugar/releases/), and place it in `BepinEx\plugins\`.
+- Download `OcteapartyExtraSugar.dll` from the latest [release](https://github.com/AnonUserGuy/OcteapartyExtraSugar/releases/), and place it in ``<Bits & Bops Installation>/BepinEx/plugins/``.
 
 ## Usage
 ### Configuration
@@ -21,6 +21,28 @@ After running Bits & Bops with the latest version of this plugin installed, a co
 For custom mixtapes, Octeaparty sugar cues will have a new "Amount" parameter which allows each sugar cue to be given an arbitrary amount of sugar cubes. Setting this to `-1` will make the cue use the amount defined by the `HowMany` parameter, and otherwise will set the amount of sugar cubes just that cue uses. 
 
 Enable `MutateEventTemplates` to have access to this parameter within the mixtape editor. 
+
+
+## Building 
+### Prequisites
+- Bits & Bops v1.5+
+- Microsoft .NET SDK v4.7.2+
+- Visual Studio 2022 (Optional)
+
+### Steps
+1. Clone this repository using ``git clone https://github.com/AnonUserGuy/OcteapartyExtraSugar.git``.
+2. Copy ``<Bits & Bops installation>/Bits & Bops_Data/Managed/Assembly-CSharp.dll`` into ``OcteapartyExtraSugar/lib/``.
+3. Build
+    - Using CLI:
+      ```bash
+      dotnet restore OcteapartyExtraSugar.sln
+      dotnet build OcteapartyExtraSugar.sln
+      ```
+    - Using Visual Studio 2022:
+       - Open OcteapartyExtraSugar.sln with Visual Studio 2022.
+       - Set build mode to "release".
+       - Build project.
+4. Copy ``OcteapartyExtraSugar/bin/Release/net472/BopCustomTextures.dll`` into ``<Bits & Bops Installation>/BepinEx/plugins/``.
 
 <br>
 <br>
